@@ -61,51 +61,100 @@ $stamp = [System.Guid]::NewGuid().ToString().Substring(0, 8)
 $bvhLocal = Join-Path $WorkDir "gen_$stamp.bvh"
 $fbxLocal = Join-Path $WorkDir "gen_$stamp.fbx"
 
-Write-Host "[1/6] Generating motion on $LaptopHost for: `"$Prompt`"" -ForegroundColor Cyan
-$remoteBvh = "/tmp/gen_$stamp.bvh"
-$sshResult = ssh $LaptopHost "cd $LaptopWorkDir && uv run python generate_bvh.py --prompt '$($Prompt -replace "'", "''")' --out $remoteBvh 2>&1"
-if ($LASTEXITCODE -ne 0 -or -not ($sshResult -match "BVH saved")) {
-    Write-Host $sshResult
-    throw "Motion generation failed on $LaptopHost."
+# Per-stage timing - the pipeline chains a remote GPU job, a local headless
+# Blender process, and two separate headless Unity launches, each with its
+# own startup/compile overhead, so "how long does one generation actually
+# take" isn't obvious from any single piece. Logged to a running metrics
+# file (below) as well as printed, so this is a real trend to look at over
+# multiple runs, not just a one-off number.
+$timings = [ordered]@{}
+$totalSw = [System.Diagnostics.Stopwatch]::StartNew()
+function Time-Stage([string]$Name, [scriptblock]$Body) {
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    & $Body
+    $sw.Stop()
+    $script:timings[$Name] = [math]::Round($sw.Elapsed.TotalSeconds, 2)
 }
-Write-Host "  done." -ForegroundColor Green
 
-Write-Host "[2/6] Pulling .bvh to this desktop" -ForegroundColor Cyan
-scp "${LaptopHost}:${remoteBvh}" $bvhLocal
-if (-not (Test-Path $bvhLocal)) { throw "scp of $remoteBvh failed." }
+Time-Stage "1_generate_motion_ssh" {
+    Write-Host "[1/6] Generating motion on $LaptopHost for: `"$Prompt`"" -ForegroundColor Cyan
+    $script:remoteBvh = "/tmp/gen_$stamp.bvh"
+    $sshResult = ssh $LaptopHost "cd $LaptopWorkDir && uv run python generate_bvh.py --prompt '$($Prompt -replace "'", "''")' --out $script:remoteBvh 2>&1"
+    if ($LASTEXITCODE -ne 0 -or -not ($sshResult -match "BVH saved")) {
+        Write-Host $sshResult
+        throw "Motion generation failed on $LaptopHost."
+    }
+    Write-Host "  done." -ForegroundColor Green
+}
 
-Write-Host "[3/6] Converting BVH -> FBX via headless Blender" -ForegroundColor Cyan
-& $BlenderExe --background --python (Join-Path $PSScriptRoot "bvh_to_fbx.py") -- $bvhLocal $fbxLocal 2>&1 | Out-Null
-if (-not (Test-Path $fbxLocal)) { throw "Blender BVH->FBX conversion failed." }
+Time-Stage "2_scp_bvh" {
+    Write-Host "[2/6] Pulling .bvh to this desktop" -ForegroundColor Cyan
+    scp "${LaptopHost}:${remoteBvh}" $bvhLocal
+    if (-not (Test-Path $bvhLocal)) { throw "scp of $remoteBvh failed." }
+}
 
-Write-Host "[4/6] Importing FBX into Unity as Humanoid" -ForegroundColor Cyan
+Time-Stage "3_blender_bvh_to_fbx" {
+    Write-Host "[3/6] Converting BVH -> FBX via headless Blender" -ForegroundColor Cyan
+    & $BlenderExe --background --python (Join-Path $PSScriptRoot "bvh_to_fbx.py") -- $bvhLocal $fbxLocal 2>&1 | Out-Null
+    if (-not (Test-Path $fbxLocal)) { throw "Blender BVH->FBX conversion failed." }
+}
+
 $assetsFbx = Join-Path $UnityProject "Assets\GeneratedAnimations\gen_$stamp.fbx"
-New-Item -ItemType Directory -Force -Path (Split-Path $assetsFbx) | Out-Null
-Copy-Item $fbxLocal $assetsFbx -Force
 $unityFbxRelPath = "Assets/GeneratedAnimations/gen_$stamp.fbx"
-
 $UnityExe = "C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe"
-$setupLog = Join-Path $WorkDir "gen_$stamp`_setup.log"
-$p1 = Start-Process -FilePath $UnityExe -ArgumentList "-batchmode","-quit","-projectPath","`"$UnityProject`"","-executeMethod","FbxHumanoidSetup.SetupFromCommandLine","-fbxPath","$unityFbxRelPath","-logFile","`"$setupLog`"" -Wait -NoNewWindow -PassThru
-$setupOut = (Get-Content $setupLog | Select-String "FbxHumanoidSetup:") -join "`n"
-Write-Host "  $setupOut"
-if ($p1.ExitCode -ne 0 -or ($setupOut -notmatch "isHuman=True")) {
-    throw "Unity Humanoid auto-mapping failed - see $setupLog"
+
+Time-Stage "4_unity_humanoid_setup" {
+    Write-Host "[4/6] Importing FBX into Unity as Humanoid" -ForegroundColor Cyan
+    New-Item -ItemType Directory -Force -Path (Split-Path $assetsFbx) | Out-Null
+    Copy-Item $fbxLocal $assetsFbx -Force
+
+    $setupLog = Join-Path $WorkDir "gen_$stamp`_setup.log"
+    $p1 = Start-Process -FilePath $UnityExe -ArgumentList "-batchmode","-quit","-projectPath","`"$UnityProject`"","-executeMethod","FbxHumanoidSetup.SetupFromCommandLine","-fbxPath","$unityFbxRelPath","-logFile","`"$setupLog`"" -Wait -NoNewWindow -PassThru
+    $setupOut = (Get-Content $setupLog | Select-String "FbxHumanoidSetup:") -join "`n"
+    Write-Host "  $setupOut"
+    if ($p1.ExitCode -ne 0 -or ($setupOut -notmatch "isHuman=True")) {
+        throw "Unity Humanoid auto-mapping failed - see $setupLog"
+    }
 }
 
-Write-Host "[5/6] Extracting the Humanoid AnimationClip" -ForegroundColor Cyan
 $unityAnimRelPath = "Assets/GeneratedAnimations/gen_$stamp.anim"
-$extractLog = Join-Path $WorkDir "gen_$stamp`_extract.log"
-$p2 = Start-Process -FilePath $UnityExe -ArgumentList "-batchmode","-quit","-projectPath","`"$UnityProject`"","-executeMethod","BvhBridgeExtractor.ExtractFromCommandLine","-prefabPath","$unityFbxRelPath","-outPath","$unityAnimRelPath","-logFile","`"$extractLog`"" -Wait -NoNewWindow -PassThru
-$extractOut = (Get-Content $extractLog | Select-String "BvhBridgeExtractor:") -join "`n"
-Write-Host "  $extractOut"
-if ($p2.ExitCode -ne 0 -or ($extractOut -notmatch "isHumanMotion=True")) {
-    throw "AnimationClip extraction failed or clip is not Humanoid - see $extractLog"
+
+Time-Stage "5_unity_extract_clip" {
+    Write-Host "[5/6] Extracting the Humanoid AnimationClip" -ForegroundColor Cyan
+    $extractLog = Join-Path $WorkDir "gen_$stamp`_extract.log"
+    $p2 = Start-Process -FilePath $UnityExe -ArgumentList "-batchmode","-quit","-projectPath","`"$UnityProject`"","-executeMethod","BvhBridgeExtractor.ExtractFromCommandLine","-prefabPath","$unityFbxRelPath","-outPath","$unityAnimRelPath","-logFile","`"$extractLog`"" -Wait -NoNewWindow -PassThru
+    $extractOut = (Get-Content $extractLog | Select-String "BvhBridgeExtractor:") -join "`n"
+    Write-Host "  $extractOut"
+    if ($p2.ExitCode -ne 0 -or ($extractOut -notmatch "isHumanMotion=True")) {
+        throw "AnimationClip extraction failed or clip is not Humanoid - see $extractLog"
+    }
 }
 
-Write-Host "[6/6] Converting to .vrma" -ForegroundColor Cyan
-$animAbsPath = Join-Path $UnityProject "Assets\GeneratedAnimations\gen_$stamp.anim"
-& (Join-Path $PSScriptRoot "Convert-AnimToVrma.ps1") -InputPath $animAbsPath -OutputPath $OutputVrma
+Time-Stage "6_convert_to_vrma" {
+    Write-Host "[6/6] Converting to .vrma" -ForegroundColor Cyan
+    $animAbsPath = Join-Path $UnityProject "Assets\GeneratedAnimations\gen_$stamp.anim"
+    & (Join-Path $PSScriptRoot "Convert-AnimToVrma.ps1") -InputPath $animAbsPath -OutputPath $OutputVrma
+}
+
+$totalSw.Stop()
+$totalSeconds = [math]::Round($totalSw.Elapsed.TotalSeconds, 2)
+
+Write-Host "`n--- Timing ---" -ForegroundColor Yellow
+foreach ($k in $timings.Keys) {
+    Write-Host ("  {0,-28} {1,6}s" -f $k, $timings[$k])
+}
+Write-Host ("  {0,-28} {1,6}s" -f "TOTAL", $totalSeconds) -ForegroundColor Yellow
+
+$metricsLog = Join-Path $WorkDir "pipeline_timings.jsonl"
+$record = [ordered]@{
+    timestamp = (Get-Date).ToString("o")
+    prompt    = $Prompt
+    stamp     = $stamp
+    success   = (Test-Path $OutputVrma)
+    timings   = $timings
+    total_seconds = $totalSeconds
+}
+($record | ConvertTo-Json -Compress) | Add-Content -Path $metricsLog
 
 if (Test-Path $OutputVrma) {
     Write-Host "`nDone: $OutputVrma" -ForegroundColor Green
