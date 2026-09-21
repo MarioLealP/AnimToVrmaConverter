@@ -79,3 +79,21 @@ SMPL (used by `joints2smpl`/SMPLify here) has 24 joints total - one wrist/hand j
 *   SSH access to `clockmost-nitro5` (the Nitro5 laptop, shared with Ollama/ComfyUI - hand-swapped for its 6GB VRAM, check `nvidia-smi` before assuming it's free) with `~/felt-t2a-spike` set up (T2M-GPT clone + `uv` venv + pretrained model + extractor checkpoint + SMPL body model, see that directory's own state for the exact setup).
 *   Blender (tested with 5.2, `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`).
 *   `sample_output/save_sample.py` (run via `uv run python save_sample.py` in `~/felt-t2a-spike`) is a smaller standalone reference for generating just the raw HumanML3D pose `.npy` without running the rest of the pipeline - useful for quickly checking what the model itself produces for a prompt.
+
+---
+
+## 🎬 Mixamo animations: `Convert-MixamoFbx.ps1`
+
+Much simpler than the T2A pipeline above - Mixamo FBX is already a real
+Humanoid-rigged animation, so there's no laptop/SSH/GPU/SMPLify/Blender step
+at all, just the same Unity-side machinery Generate-Animation.ps1 already
+uses past the BVH stage (~40s total, confirmed working 2026-09-21).
+
+```powershell
+.\Convert-MixamoFbx.ps1 -FbxPath "C:\path\to\downloaded.fbx" -OutputVrma "C:\path\to\output.vrma"
+```
+
+Mixamo (mixamo.com) requires an Adobe account login through the browser and
+has no public API - there's no way to fetch animations programmatically, so
+downloading the `.fbx` yourself first is unavoidable. This script picks up
+from there: import as Humanoid, extract the clip, convert to `.vrma`.
