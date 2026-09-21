@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Full text -> .vrma pipeline: T2M-GPT (on the Nitro5 laptop) -> BVH -> Blender FBX ->
     Unity Humanoid retarget -> VrmaCliConverter.
@@ -48,7 +48,7 @@
     Where to write the final .vrma file.
 
 .EXAMPLE
-    .\Generate-Animation.ps1 -Prompt "a person does a backflip" -OutputVrma "F:\workspace\Projects\felt-character-assets\felt-godot-overlay\animations\library\reaction\test\backflip.vrma"
+    .\Generate-Animation.ps1 -Prompt "a person does a backflip" -OutputVrma "E:\Felt\felt-character-assets\felt-godot-overlay\animations\library\reaction\test\backflip.vrma"
 
 .EXAMPLE
     .\Generate-Animation.ps1 -BvhPath "F:\path\to\already_generated.bvh" -OutputVrma "F:\path\to\output.vrma"
@@ -63,8 +63,8 @@ param(
 
     [string]$LaptopHost = "clockmost-nitro5",
     [string]$LaptopWorkDir = "~/felt-t2a-spike",
-    [string]$UnityProject = "F:\workspace\Projects\AnimToVrmaConverter\My project",
-    [string]$WorkDir = "F:\workspace\Projects\AnimToVrmaConverter\sample_output",
+    [string]$UnityProject = "E:\Felt\AnimToVrmaConverter\My project",
+    [string]$WorkDir = "E:\Felt\AnimToVrmaConverter\sample_output",
     [string]$BlenderExe = "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 )
 

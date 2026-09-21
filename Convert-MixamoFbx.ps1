@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Mixamo .fbx -> .vrma. Much simpler than Generate-Animation.ps1's T2A
     pipeline - Mixamo FBX is already a real Humanoid-rigged animation, no
@@ -25,7 +25,7 @@
     Where to write the final .vrma file.
 
 .EXAMPLE
-    .\Convert-MixamoFbx.ps1 -FbxPath "C:\Users\lealm\Downloads\Walking.fbx" -OutputVrma "F:\workspace\Projects\felt-character-assets\felt-godot-overlay\animations\library\idle\walk.vrma"
+    .\Convert-MixamoFbx.ps1 -FbxPath "C:\Users\lealm\Downloads\Walking.fbx" -OutputVrma "E:\Felt\felt-character-assets\felt-godot-overlay\animations\library\idle\walk.vrma"
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -34,8 +34,8 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$OutputVrma,
 
-    [string]$UnityProject = "F:\workspace\Projects\AnimToVrmaConverter\My project",
-    [string]$WorkDir = "F:\workspace\Projects\AnimToVrmaConverter\sample_output"
+    [string]$UnityProject = "E:\Felt\AnimToVrmaConverter\My project",
+    [string]$WorkDir = "E:\Felt\AnimToVrmaConverter\sample_output"
 )
 
 $ErrorActionPreference = "Stop"

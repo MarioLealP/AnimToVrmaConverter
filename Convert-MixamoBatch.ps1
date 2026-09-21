@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Batch-converts a whole folder tree of Mixamo .fbx files to .vrma in ONE
     Unity session - built for hundreds of files, where Convert-MixamoFbx.ps1's
@@ -25,14 +25,14 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$SourceRoot,
 
-    [string]$OutputRoot = "F:\workspace\Projects\felt-character-assets\felt-godot-overlay\animations\library",
+    [string]$OutputRoot = "E:\Felt\felt-character-assets\felt-godot-overlay\animations\library",
 
-    [string]$UnityProject = "F:\workspace\Projects\AnimToVrmaConverter\My project"
+    [string]$UnityProject = "E:\Felt\AnimToVrmaConverter\My project"
 )
 
 $ErrorActionPreference = "Stop"
 $UnityExe = "C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe"
-$logFile = "F:\workspace\Projects\AnimToVrmaConverter\sample_output\batch_mixamo_$([System.Guid]::NewGuid().ToString().Substring(0,8)).log"
+$logFile = "E:\Felt\AnimToVrmaConverter\sample_output\batch_mixamo_$([System.Guid]::NewGuid().ToString().Substring(0,8)).log"
 
 Write-Host "Converting $SourceRoot -> $OutputRoot (one Unity session, may take a while for many files)..." -ForegroundColor Cyan
 

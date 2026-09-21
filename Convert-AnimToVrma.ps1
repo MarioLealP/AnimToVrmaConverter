@@ -1,4 +1,4 @@
-param (
+﻿param (
     [Parameter(Mandatory=$true, HelpMessage="Path to the source .anim or .unitypackage file")]
     [string]$InputPath,
 
@@ -6,7 +6,7 @@ param (
     [string]$OutputPath,
 
     [Parameter(Mandatory=$false)]
-    [string]$UnityProject = "F:\workspace\Projects\AnimToVrmaConverter\My project",
+    [string]$UnityProject = "E:\Felt\AnimToVrmaConverter\My project",
 
     [Parameter(Mandatory=$false)]
     [string]$UnityExe = "C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe"
