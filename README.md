@@ -44,3 +44,38 @@ During development, several robust fixes were applied to the open-source toolkit
 *   **Incompatible UnityPackages:** If you drag and drop a `.unitypackage` that contains broken or incompatible C# scripts (e.g., a package meant for a different Unity version), Unity will refuse to compile the project, and the batch script will abort with `Scripts have compiler errors`. Ensure asset packs only contain models/animations, or are strictly compatible with Unity 2022.3.
 *   **Non-Humanoid Animations:** The converter explicitly requires standard Unity Humanoid animations. Generic/Legacy rigs will be rejected by the internal C# validation check.
 *   **Editor Locks:** Ensure the Unity Editor for `"My project"` is **closed** before running the converter. Unity batchmode will instantly fail if the project is already open in a visual Editor window.
+
+---
+
+## 🤖 Text-to-Animation (T2A): `Generate-Animation.ps1`
+
+A full **text prompt -> `.vrma`** pipeline, confirmed working end to end 2026-09-21. Built directly (an earlier attempt at handing the bridging step to Gemini didn't land, per Mario 2026-09-21: "it's not being too bright or useful, so you gotta do it yourself").
+
+```powershell
+.\Generate-Animation.ps1 -Prompt "a person does a backflip" -OutputVrma "C:\path\to\output.vrma"
+```
+
+### Pipeline
+
+1. **T2M-GPT** (`Mael-zys/T2M-GPT`, HumanML3D-trained) runs on the Nitro5 laptop's RTX 3060 over SSH (`~/felt-t2a-spike`, `generate_bvh.py`) - text in, ~1.3GB VRAM, well under the laptop's 6GB budget.
+2. Inside that same script: `recover_from_ric` -> SMPLify (`joints2smpl`, an iterative GPU optimization fitting SMPL body-model rotations to the generated joint positions - genuinely slow, not a fast forward pass) -> the vendored `smpl2bvh` -> `.bvh`.
+3. `bvh_to_fbx.py`: headless Blender converts `.bvh` -> `.fbx`. Necessary because UniHumanoid's own BVH importer (already in this Unity project, from UniVRM) only ever produces a **legacy** clip (`Animation.legacy = true` in its own source) - legacy and Humanoid/Mecanim are different Unity animation systems, and a legacy clip can never satisfy `VrmaCliConverter`'s `isHumanMotion` check. Unity's native FBX importer does real Humanoid muscle-space retargeting; BVH has no such importer.
+4. `FbxHumanoidSetup.cs` (Unity Editor script): sets the FBX's rig to Humanoid and lets Unity's own automatic bone-mapper build the Avatar.
+5. `BvhBridgeExtractor.cs`: the Humanoid `AnimationClip` comes back as a sub-asset embedded in the FBX/prefab, not a standalone file - `VrmaCliConverter` only loads a real `.anim` file, so this extracts it to one.
+6. `Convert-AnimToVrma.ps1` (existing, unchanged) -> the final `.vrma`.
+
+### Bugs found and fixed getting this to actually work
+
+*   **Chaotic root-joint jitter (thousands of units of "drift" in 3 seconds for someone just standing still):** T2M-GPT's raw output is in HumanML3D's **normalized** (mean/std z-scored) space - `recover_from_ric` needs it denormalized first (`pred_pose * std + mean`, using `mean.npy`/`std.npy` from the "extractor" checkpoint bundle, `dataset/prepare/download_extractor.sh` - a separate download from the base pretrained model). Skipping this is what an earlier attempt (Gemini's) missed; it's why that attempt's BVH output looked structurally fine but moved the character wildly around the scene.
+*   **BVH -> FBX frame-rate mismatch:** Blender's BVH importer needs `update_scene_fps=True`, or the bake runs at the wrong fps against the source clip's actual timing.
+*   **BVH -> FBX duration padding:** FBX export bakes the **scene's** frame range, not the imported action's own range - a fresh Blender scene defaults to `frame_end=250` regardless of how long the actual motion is, silently padding a 3-second clip out to ~10-12 seconds. Fixed by setting `scene.frame_start`/`frame_end` to the action's real `frame_range` before exporting.
+
+### Known limitation: no finger animation
+
+SMPL (used by `joints2smpl`/SMPLify here) has 24 joints total - one wrist/hand joint per side, no individual fingers. Even switching to SMPL-X (which does have finger joints) wouldn't add *animated* fingers: T2M-GPT was trained on HumanML3D, a body-only motion capture dataset with no hand data at all, so there's nothing upstream driving finger motion regardless of which body model does the fitting. Fingers render static. This is a ceiling of the training data, not a pipeline bug.
+
+### Requirements beyond the base pipeline above
+
+*   SSH access to `clockmost-nitro5` (the Nitro5 laptop, shared with Ollama/ComfyUI - hand-swapped for its 6GB VRAM, check `nvidia-smi` before assuming it's free) with `~/felt-t2a-spike` set up (T2M-GPT clone + `uv` venv + pretrained model + extractor checkpoint + SMPL body model, see that directory's own state for the exact setup).
+*   Blender (tested with 5.2, `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`).
+*   `sample_output/save_sample.py` (run via `uv run python save_sample.py` in `~/felt-t2a-spike`) is a smaller standalone reference for generating just the raw HumanML3D pose `.npy` without running the rest of the pipeline - useful for quickly checking what the model itself produces for a prompt.

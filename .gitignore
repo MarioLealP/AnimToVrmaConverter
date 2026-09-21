@@ -30,3 +30,9 @@ Editor_temp/
 
 sysinfo.txt
 crashlytics-build.properties
+
+# Generate-Animation.ps1's scratch import folder - it creates and populates
+# this fresh on every run (a real .fbx/.anim per generation), not curated
+# content to version.
+My project/Assets/GeneratedAnimations/
+My project/Assets/GeneratedAnimations.meta
