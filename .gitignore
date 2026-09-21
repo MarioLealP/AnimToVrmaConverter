@@ -36,3 +36,7 @@ crashlytics-build.properties
 # content to version.
 My project/Assets/GeneratedAnimations/
 My project/Assets/GeneratedAnimations.meta
+
+# BatchMixamoConverter.cs's scratch import folder - same deal.
+My project/Assets/BatchImport/
+My project/Assets/BatchImport.meta
