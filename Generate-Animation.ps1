@@ -35,16 +35,28 @@
 
 .PARAMETER Prompt
     The text prompt to generate a motion from, e.g. "a person waves with their right hand".
+    Mutually exclusive with -BvhPath.
+
+.PARAMETER BvhPath
+    Skip stages 1-2 (SSH generation) and start from an already-generated .bvh file -
+    used by felt-t2a-studio, which generates the .bvh itself via the persistent
+    inference server (see inference_server.py on the laptop) so the fast preview
+    and the eventual conversion share the exact same generated motion, not two
+    independent (stochastic) samples. Mutually exclusive with -Prompt.
 
 .PARAMETER OutputVrma
     Where to write the final .vrma file.
 
 .EXAMPLE
     .\Generate-Animation.ps1 -Prompt "a person does a backflip" -OutputVrma "F:\workspace\Projects\felt-character-assets\felt-godot-overlay\animations\library\reaction\test\backflip.vrma"
+
+.EXAMPLE
+    .\Generate-Animation.ps1 -BvhPath "F:\path\to\already_generated.bvh" -OutputVrma "F:\path\to\output.vrma"
 #>
 param(
-    [Parameter(Mandatory=$true)]
     [string]$Prompt,
+
+    [string]$BvhPath,
 
     [Parameter(Mandatory=$true)]
     [string]$OutputVrma,
@@ -57,8 +69,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Prompt) -eq [string]::IsNullOrWhiteSpace($BvhPath)) {
+    throw "Provide exactly one of -Prompt or -BvhPath, not both/neither."
+}
+
 $stamp = [System.Guid]::NewGuid().ToString().Substring(0, 8)
-$bvhLocal = Join-Path $WorkDir "gen_$stamp.bvh"
+$bvhLocal = if ($BvhPath) { $BvhPath } else { Join-Path $WorkDir "gen_$stamp.bvh" }
 $fbxLocal = Join-Path $WorkDir "gen_$stamp.fbx"
 
 # Per-stage timing - the pipeline chains a remote GPU job, a local headless
@@ -76,21 +93,28 @@ function Time-Stage([string]$Name, [scriptblock]$Body) {
     $script:timings[$Name] = [math]::Round($sw.Elapsed.TotalSeconds, 2)
 }
 
-Time-Stage "1_generate_motion_ssh" {
-    Write-Host "[1/6] Generating motion on $LaptopHost for: `"$Prompt`"" -ForegroundColor Cyan
-    $script:remoteBvh = "/tmp/gen_$stamp.bvh"
-    $sshResult = ssh $LaptopHost "cd $LaptopWorkDir && uv run python generate_bvh.py --prompt '$($Prompt -replace "'", "''")' --out $script:remoteBvh 2>&1"
-    if ($LASTEXITCODE -ne 0 -or -not ($sshResult -match "BVH saved")) {
-        Write-Host $sshResult
-        throw "Motion generation failed on $LaptopHost."
+if ($BvhPath) {
+    Write-Host "[1-2/6] Using pre-generated BVH: $BvhPath (skipping SSH generation)" -ForegroundColor Cyan
+    if (-not (Test-Path $bvhLocal)) { throw "-BvhPath $BvhPath does not exist." }
+    $timings["1_generate_motion_ssh"] = 0
+    $timings["2_scp_bvh"] = 0
+} else {
+    Time-Stage "1_generate_motion_ssh" {
+        Write-Host "[1/6] Generating motion on $LaptopHost for: `"$Prompt`"" -ForegroundColor Cyan
+        $script:remoteBvh = "/tmp/gen_$stamp.bvh"
+        $sshResult = ssh $LaptopHost "cd $LaptopWorkDir && uv run python generate_bvh.py --prompt '$($Prompt -replace "'", "''")' --out $script:remoteBvh 2>&1"
+        if ($LASTEXITCODE -ne 0 -or -not ($sshResult -match "BVH saved")) {
+            Write-Host $sshResult
+            throw "Motion generation failed on $LaptopHost."
+        }
+        Write-Host "  done." -ForegroundColor Green
     }
-    Write-Host "  done." -ForegroundColor Green
-}
 
-Time-Stage "2_scp_bvh" {
-    Write-Host "[2/6] Pulling .bvh to this desktop" -ForegroundColor Cyan
-    scp "${LaptopHost}:${remoteBvh}" $bvhLocal
-    if (-not (Test-Path $bvhLocal)) { throw "scp of $remoteBvh failed." }
+    Time-Stage "2_scp_bvh" {
+        Write-Host "[2/6] Pulling .bvh to this desktop" -ForegroundColor Cyan
+        scp "${LaptopHost}:${remoteBvh}" $bvhLocal
+        if (-not (Test-Path $bvhLocal)) { throw "scp of $remoteBvh failed." }
+    }
 }
 
 Time-Stage "3_blender_bvh_to_fbx" {
@@ -148,7 +172,7 @@ Write-Host ("  {0,-28} {1,6}s" -f "TOTAL", $totalSeconds) -ForegroundColor Yello
 $metricsLog = Join-Path $WorkDir "pipeline_timings.jsonl"
 $record = [ordered]@{
     timestamp = (Get-Date).ToString("o")
-    prompt    = $Prompt
+    prompt    = if ($Prompt) { $Prompt } else { "(pre-generated bvh: $BvhPath)" }
     stamp     = $stamp
     success   = (Test-Path $OutputVrma)
     timings   = $timings
