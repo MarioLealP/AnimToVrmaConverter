@@ -97,3 +97,13 @@ Mixamo (mixamo.com) requires an Adobe account login through the browser and
 has no public API - there's no way to fetch animations programmatically, so
 downloading the `.fbx` yourself first is unavoidable. This script picks up
 from there: import as Humanoid, extract the clip, convert to `.vrma`.
+
+---
+
+## Multi-clip packs and non-T-pose BVH (WP-18B, 2026-09-26)
+
+*   **`MultiClipFbxConverter.cs`**: one `.vrma` per take of a multi-take FBX (e.g. Quaternius UAL: 43 takes in one file; the Mixamo scripts only ever take the first, `A_TPose`). `-fbxPath` may also be a folder of single-take FBX files (output named after each file). Unity batchmode: `-executeMethod MultiClipFbxConverter.RunFromCommandLine -fbxPath <file|dir> -outDir <dir> [-clips a,b]`.
+*   **`vrma_fix_facing.py --yaw <deg>`**: turns a finished `.vrma` about the vertical axis by rewriting the hips track. Needed because clip import settings (rotationOffset, bake-into-pose) are ignored by `AnimationClipToVrmaCore` (it samples raw curves). UAL comes out at ~180°, so use `--yaw 180`.
+*   **`bvh_cycle.py`**: cuts one seamless, in-place gait cycle out of a straight-line mocap walk take and prints its natural speed (m/s).
+*   **`bvh_to_fbx_tpose.py`**: like `bvh_to_fbx.py`, but for BVH whose rest pose is not a T-pose (Bandai Namco Research dataset: every chain lies along +X). It re-rests a copy of the armature in a facing-aware T-pose and bakes world-space Copy Transforms onto it.
+*   Bandai pipeline: `bvh_cycle.py` (walks only) → `blender --background --python bvh_to_fbx_tpose.py -- in.bvh out.fbx` → `MultiClipFbxConverter` on the FBX folder.
