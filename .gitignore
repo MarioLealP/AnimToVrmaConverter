@@ -51,3 +51,18 @@ Movement Animset Pro*/
 # felt-character-assets' animation library, so these are scratch.
 /MovementAnimsetPro_*.vrma
 /MaskmanFace_*.vrma
+
+# Imported third-party/PAID asset packs (WP-24): source material kept on disk,
+# never versioned or pushed. =1000= has no other copy - don't delete it.
+My project/Assets/=1000=/
+My project/Assets/=1000=.meta
+My project/Assets/Kipfel's_Moving_Expression_Set/
+My project/Assets/Kipfel's_Moving_Expression_Set.meta
+My project/Assets/MovementAnimsetPro/
+My project/Assets/MovementAnimsetPro.meta
+My project/Assets/Tako.S EN/
+My project/Assets/Tako.S EN.meta
+My project/Assets/Violet/
+My project/Assets/Violet.meta
+My project/Assets/!dalha_*
+__pycache__/
