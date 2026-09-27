@@ -107,3 +107,7 @@ from there: import as Humanoid, extract the clip, convert to `.vrma`.
 *   **`bvh_cycle.py`**: cuts one seamless, in-place gait cycle out of a straight-line mocap walk take and prints its natural speed (m/s).
 *   **`bvh_to_fbx_tpose.py`**: like `bvh_to_fbx.py`, but for BVH whose rest pose is not a T-pose (Bandai Namco Research dataset: every chain lies along +X). It re-rests a copy of the armature in a facing-aware T-pose and bakes world-space Copy Transforms onto it.
 *   Bandai pipeline: `bvh_cycle.py` (walks only) → `blender --background --python bvh_to_fbx_tpose.py -- in.bvh out.fbx` → `MultiClipFbxConverter` on the FBX folder.
+
+## Repo hygiene (WP-24, 2026-09-27)
+
+`.unitypackage` files and Unity `*.log` files are no longer tracked (see `.gitignore`), and the paid **Movement Animset Pro** package is explicitly ignored, so it must never be pushed. The four UniVRM/VRM packages (~100 MB) and the logs **are still in git history**. Removing them would need a history rewrite (`git filter-repo`) plus a force-push. That was deliberately not done; it is an option if the repo size ever matters.

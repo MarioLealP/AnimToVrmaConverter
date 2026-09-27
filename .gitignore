@@ -40,3 +40,14 @@ My project/Assets/GeneratedAnimations.meta
 # BatchMixamoConverter.cs's scratch import folder - same deal.
 My project/Assets/BatchImport/
 My project/Assets/BatchImport.meta
+
+# WP-24 (2026-09-27): never version Unity packages or logs.
+*.log
+*.unitypackage
+# PAID asset - must never be pushed, even by a careless `git add .`.
+Movement Animset Pro*.unitypackage
+Movement Animset Pro*/
+# Loose converter outputs at the repo root: WP-18 copies what it needs into
+# felt-character-assets' animation library, so these are scratch.
+/MovementAnimsetPro_*.vrma
+/MaskmanFace_*.vrma
