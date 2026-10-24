@@ -66,3 +66,12 @@ My project/Assets/Violet/
 My project/Assets/Violet.meta
 My project/Assets/!dalha_*
 __pycache__/
+
+# bought / third-party animation packs and outputs made from them - never commit (stripped from history 2026-10-24)
+My project/Assets/AFK Shiki/
+My project/Assets/AFK Shiki.meta
+My project/Assets/TempCLI/
+My project/Assets/TempCLI.meta
+sample_output/*.vrma
+sample_output/idle.bvh
+*.log
